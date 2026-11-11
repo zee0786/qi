@@ -1,0 +1,32 @@
+{
+  "name": "quality-inspection",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "husky",
+    "test": "npm --prefix backend test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "audit:all": "npm audit --audit-level=high && npm --prefix backend audit --audit-level=high && npm --prefix frontend audit --audit-level=high",
+    "db:setup": "npm --prefix backend run db:setup"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,html,yml}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^17.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10"
+  }
+}
