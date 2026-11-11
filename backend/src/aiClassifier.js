@@ -1,25 +1,22 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { ALL_OUTCOMES, normalizeConfidence, normalizeOutcome } from './taxonomy.js';
 
-const TOOL_NAME = 'report_defect';
-
-const TOOL = {
-  name: TOOL_NAME,
-  description: 'Report the single most visible manufacturing defect in the photographed unit.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      predicted_defect_type: { type: 'string', enum: ALL_OUTCOMES },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-    },
-    required: ['predicted_defect_type', 'confidence'],
-  },
-};
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 const SYSTEM_PROMPT = `You are a manufacturing quality inspector assistant.
 Classify the photographed unit into exactly one of: ${ALL_OUTCOMES.join(', ')}.
 Use "No Defect" when the unit looks clean. Report confidence between 0 and 1.
-Always answer by calling the ${TOOL_NAME} tool.`;
+Answer only with JSON.`;
+
+// Gemini constrains its output to this schema; we still validate the result ourselves.
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    predicted_defect_type: { type: 'STRING', enum: ALL_OUTCOMES },
+    confidence: { type: 'NUMBER' },
+  },
+  required: ['predicted_defect_type', 'confidence'],
+};
 
 /** Raised when the model answered, but not with something we can trust. */
 export class AiOutputError extends Error {
@@ -38,15 +35,18 @@ function parseJsonLoose(text) {
   }
 }
 
-/** Turns a raw model response into a validated { predicted, confidence, raw }. */
+/** Turns a raw Gemini response into a validated { predicted, confidence, raw }. */
 export function extractPrediction(response) {
-  const blocks = Array.isArray(response?.content) ? response.content : [];
-  const toolBlock = blocks.find((b) => b.type === 'tool_use' && b.name === TOOL_NAME);
-  const textBlock = blocks.find((b) => b.type === 'text');
-  const payload = toolBlock?.input ?? parseJsonLoose(textBlock?.text);
+  const blockReason = response?.promptFeedback?.blockReason;
+  if (blockReason) throw new AiOutputError(`Request was blocked by the model (${blockReason})`);
 
-  if (!payload || typeof payload !== 'object') {
-    throw new AiOutputError('Model returned no structured output', textBlock?.text ?? null);
+  const candidate = response?.candidates?.[0];
+  const text = candidate?.content?.parts?.find((part) => typeof part.text === 'string')?.text;
+  const payload = parseJsonLoose(text);
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    const reason = candidate?.finishReason ? ` (finish reason: ${candidate.finishReason})` : '';
+    throw new AiOutputError(`Model returned no structured output${reason}`, text ?? null);
   }
   const predicted = normalizeOutcome(payload.predicted_defect_type);
   if (!predicted) {
@@ -55,31 +55,63 @@ export function extractPrediction(response) {
   return { predicted, confidence: normalizeConfidence(payload.confidence), raw: payload };
 }
 
-export function createClassifier({ apiKey, model, timeoutMs = 30000, client }) {
-  const sdk =
-    client ?? (apiKey ? new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 2 }) : null);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function createClassifier({
+  apiKey,
+  model,
+  timeoutMs = 30000,
+  maxRetries = 2,
+  retryDelayMs = 1000,
+  fetchImpl = fetch,
+}) {
+  async function callGemini(body) {
+    for (let attempt = 0; ; attempt += 1) {
+      let res;
+      try {
+        res = await fetchImpl(`${API_BASE}/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (err) {
+        if (attempt < maxRetries && err.name !== 'TimeoutError') {
+          await sleep(retryDelayMs * (attempt + 1));
+          continue;
+        }
+        throw new Error(err.name === 'TimeoutError' ? 'AI request timed out' : 'AI request failed');
+      }
+      if (res.ok) return res.json();
+      if (RETRYABLE_STATUS.has(res.status) && attempt < maxRetries) {
+        await sleep(retryDelayMs * (attempt + 1));
+        continue;
+      }
+      // Status only: response bodies and headers could echo request details.
+      throw new Error(`Gemini request failed with status ${res.status}`);
+    }
+  }
+
   return {
     model,
     async classify({ buffer, mimeType }) {
-      if (!sdk) throw new Error('ANTHROPIC_API_KEY is not configured');
-      const response = await sdk.messages.create({
-        model,
-        max_tokens: 300,
-        system: SYSTEM_PROMPT,
-        tools: [TOOL],
-        tool_choice: { type: 'tool', name: TOOL_NAME },
-        messages: [
+      if (!apiKey) throw new Error('GEMINI_API_KEY is not configured');
+      const response = await callGemini({
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: mimeType, data: buffer.toString('base64') },
-              },
-              { type: 'text', text: 'Inspect this unit.' },
+            parts: [
+              { inline_data: { mime_type: mimeType, data: buffer.toString('base64') } },
+              { text: 'Inspect this unit.' },
             ],
           },
         ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: 'application/json',
+          responseSchema: RESPONSE_SCHEMA,
+        },
       });
       return extractPrediction(response);
     },

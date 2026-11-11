@@ -9,8 +9,8 @@ import { createRepo } from './repo.js';
 const uploadDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
 
 const classifier = createClassifier({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  model: process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5',
+  apiKey: process.env.GEMINI_API_KEY,
+  model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   timeoutMs: Number(process.env.AI_TIMEOUT_MS) || 30000,
 });
 

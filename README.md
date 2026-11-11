@@ -3,7 +3,7 @@
 A Quality Engineer photographs a unit, a vision model suggests what is wrong with it, and the engineer
 accepts or overrides that suggestion before anything is recorded. Overrides are stored as queryable data.
 
-**Stack:** React (Vite) · Node.js (Express 5) · PostgreSQL · Anthropic Claude vision API
+**Stack:** React (Vite) · Node.js (Express 5) · PostgreSQL · Google Gemini vision API
 
 ## Setup
 
@@ -18,7 +18,8 @@ npm --prefix frontend install
 # 2. Start Postgres and configure the backend
 docker compose up -d
 cp backend/.env.example backend/.env
-#    -> put your key in backend/.env as ANTHROPIC_API_KEY=...
+#    -> put your free Gemini key in backend/.env as GEMINI_API_KEY=...
+#       (create one at https://aistudio.google.com/apikey)
 
 # 3. Create tables and seed two users and two batches
 npm run db:setup
@@ -35,15 +36,21 @@ Run the tests with one command: `npm test`
 
 ## Vision model
 
-**Anthropic Claude (`claude-haiku-5-5`)**, configurable with `ANTHROPIC_MODEL`. It is vision-capable,
-fast and inexpensive, and tool use lets me force the answer into a JSON schema whose `enum` is the fixed
-taxonomy. Cost: I have not run this against the live API, so I can't quote real spend. A handful of test
-photos should cost well under a dollar; check your Anthropic console for the actual figure.
+**Google Gemini (`gemini-2.5-flash` by default)**, configurable with `GEMINI_MODEL`. I chose it because it is
+vision-capable, fast, and has a free tier that needs only an API key from Google AI Studio, which is plenty
+for testing a handful of photos. Gemini's structured output (`responseMimeType` + `responseSchema`) lets me
+constrain the answer to the fixed taxonomy. The API is called directly with `fetch`, so there is no
+provider SDK to install.
+
+**Cost:** nothing, on the free tier. Free-tier limits and available model names change over time, so check
+AI Studio if a call is rejected with `429` or `404`; setting `GEMINI_MODEL` to another current Flash model
+is usually enough. I have not run the app against the live API myself.
 
 ## How the flow works
 
 1. `POST /api/classify` (engineers only) saves the photo, calls the model, and stores the call in
-   `ai_predictions`. It returns a `predictionId`, the validated prediction and the confidence. No
+   `ai_predictions`. It returns a `predictionId`, the validated prediction and the confidence. Transient errors
+   (429/5xx) are retried twice with a short backoff, and each call has a timeout (`AI_TIMEOUT_MS`). No
    inspection exists yet.
 2. The UI shows the AI's answer next to "Your call". The engineer accepts or picks another type and may
    add comments.
@@ -59,7 +66,7 @@ photos should cost well under a dollar; check your Anthropic console for the act
   injectable client so tests never hit the network.
 - **Inspection vs. AI call:** separate tables. `ai_predictions` records every model call (including raw
   response, status, errors). `inspections` references one prediction (unique, so a photo is logged once).
-- **Constraining model output:** the model is forced to call a tool whose schema enumerates the five
+- **Constraining model output:** Gemini is asked for JSON matching a schema that enumerates the five
   allowed values, then the response is validated again server-side (`normalizeOutcome`,
   `normalizeConfidence`). Free text, unsupported categories or malformed output become status `unusable`.
   The database also has `CHECK` constraints on every defect column.
@@ -94,7 +101,7 @@ error (or an unused variable) should be blocked. Run the same checks manually wi
 
 ## Known limitations
 
-- I could not run the app against a live PostgreSQL or the live Anthropic API in my build environment.
+- I could not run the app against a live PostgreSQL or the live Gemini API in my build environment.
   The unit tests, lint, formatting and the production build pass, but the SQL in `repo.js` and the model
   call have not been exercised end to end. Please do a first smoke test with a couple of photos.
 - Identity is a header, as the brief allows. This is not real authentication.
