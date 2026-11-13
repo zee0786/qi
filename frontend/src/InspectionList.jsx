@@ -67,8 +67,8 @@ export default function InspectionList() {
                     <td>
                       <img className="thumb" src={row.imageRef} alt={`Unit from ${row.batchId}`} />
                     </td>
-                    <td>{row.batchId}</td>
-                    <td>
+                    <td data-label="Batch">{row.batchId}</td>
+                    <td data-label="Final result">
                       <span
                         className={row.finalDefectType === 'No Defect' ? 'pill pass' : 'pill fail'}
                       >
@@ -76,11 +76,11 @@ export default function InspectionList() {
                       </span>
                       {row.comments && <div className="comment">{row.comments}</div>}
                     </td>
-                    <td>
+                    <td data-label="AI prediction">
                       <span className={`verdict-text ${verdict.cls}`}>{verdict.text}</span>
                     </td>
-                    <td>{row.inspector}</td>
-                    <td>{formatTime(row.inspectedAt)}</td>
+                    <td data-label="Inspector">{row.inspector}</td>
+                    <td data-label="Logged">{formatTime(row.inspectedAt)}</td>
                   </tr>
                 );
               })}

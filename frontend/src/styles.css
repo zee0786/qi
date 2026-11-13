@@ -412,3 +412,151 @@ th {
     grid-template-columns: 7.5rem 1fr 2rem;
   }
 }
+
+/* ---------- Mobile friendliness ---------- */
+
+/* 16px controls stop iOS Safari zooming in on focus; 44px is a comfortable touch target. */
+select,
+input[type='file'],
+textarea {
+  font-size: 1rem;
+  min-height: 44px;
+}
+button.primary {
+  min-height: 44px;
+}
+.choice {
+  min-height: 44px;
+}
+.choice input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab {
+  white-space: nowrap;
+  min-height: 44px;
+}
+img.preview,
+.thumb {
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 0 0.75rem 2rem;
+  }
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  /* Header: stack the title and the role picker, full width. */
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding-top: 1rem;
+  }
+  .who {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  .who select,
+  .inline select {
+    width: 100%;
+  }
+
+  /* Tabs share the width evenly. */
+  .tab {
+    flex: 1;
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+  }
+
+  /* Toolbars: label above a full-width control. */
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .inline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+  button.primary {
+    width: 100%;
+  }
+  .tag {
+    font-size: 0.75rem;
+  }
+  .call {
+    font-size: 1.5rem;
+  }
+
+  /* Inspection table becomes a stack of cards. */
+  .scroll {
+    overflow: visible;
+  }
+  table,
+  tbody,
+  tr,
+  td {
+    display: block;
+  }
+  table {
+    background: none;
+    border: 0;
+  }
+  thead {
+    position: absolute;
+    left: -9999px; /* hidden visually, still available to screen readers */
+  }
+  tr {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    column-gap: 0.85rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  td {
+    border: 0;
+    padding: 0.2rem 0;
+    grid-column: 2;
+  }
+  td:first-child {
+    grid-column: 1;
+    grid-row: 1 / span 5;
+  }
+  td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .thumb {
+    width: 72px;
+    height: 72px;
+  }
+  .comment {
+    max-width: none;
+  }
+
+  /* Dashboard */
+  .ledger > div {
+    padding: 0.75rem 0.9rem;
+  }
+  .ledger dd {
+    font-size: 1.7rem;
+  }
+}
